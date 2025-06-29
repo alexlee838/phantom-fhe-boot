@@ -69,4 +69,8 @@ public:
 
 void special_fft_forward(DCKKSEncoderInfo &gp, size_t log_n, const cudaStream_t &stream);
 
+void special_fft_forward_sparse(DCKKSEncoderInfo &gp, cuDoubleComplex *msg, size_t log_n, const cudaStream_t &stream);
+
 void special_fft_backward(DCKKSEncoderInfo &gp, size_t log_n, double scalar, const cudaStream_t &stream);
+
+void special_fft_backward_sparse(DCKKSEncoderInfo &gp, cuDoubleComplex *msg, size_t log_n, double scalar, const cudaStream_t &stream);

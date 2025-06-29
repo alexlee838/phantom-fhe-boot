@@ -294,6 +294,71 @@ void PhantomSecretKey::encrypt_zero_symmetric(const PhantomContext &context, Pha
     }
 }
 
+void PhantomSecretKey::encrypt_zero_symmetric_new_key(const PhantomContext &context, uint64_t* new_key, PhantomCiphertext &cipher,
+                                              const uint8_t *prng_seed_a, size_t chain_index, bool is_ntt_form,
+                                              const cudaStream_t &stream) const {
+    auto &context_data = context.get_context_data(chain_index);
+    auto &parms = context_data.parms();
+    auto &coeff_modulus = parms.coeff_modulus();
+    auto poly_degree = parms.poly_modulus_degree();
+    auto coeff_mod_size = coeff_modulus.size();
+    auto base_rns = context.gpu_rns_tables().modulus();
+
+    cipher.resize(context, chain_index, 2, stream); // size = 2
+    cipher.is_ntt_form_ = is_ntt_form;
+    cipher.scale_ = 1.0;
+    cipher.correction_factor_ = 1;
+
+    // Generate ciphertext: (c[0], c[1]) = ([-(as+ e)]_q, a) in BFV/CKKS
+    // Generate ciphertext: (c[0], c[1]) = ([-(as+te)]_q, a) in BGV
+    uint64_t *c0 = cipher.data();
+    uint64_t *c1 = cipher.data() + poly_degree * coeff_mod_size;
+
+    uint64_t gridDimGlb = poly_degree * coeff_mod_size / blockDimGlb.x;
+    // first generate the error e
+    auto prng_seed_error = make_cuda_auto_ptr<uint8_t>(phantom::util::global_variables::prng_seed_byte_count, stream);
+    random_bytes(prng_seed_error.get(), phantom::util::global_variables::prng_seed_byte_count, stream);
+
+    auto u = make_cuda_auto_ptr<uint64_t>(coeff_mod_size * poly_degree, stream);
+
+    sample_error_poly<<<gridDimGlb, blockDimGlb, 0, stream>>>(
+            u.get(), prng_seed_error.get(), base_rns, poly_degree,
+            coeff_mod_size);
+
+    // uniform random generator
+    sample_uniform_poly<<<gridDimGlb, blockDimGlb, 0, stream>>>(
+            c1, prng_seed_a, base_rns, poly_degree, coeff_mod_size);
+
+    if (is_ntt_form) {
+        if (parms.scheme() == scheme_type::bgv) {
+            // noise = te instead of e in BGV
+            multiply_scalar_rns_poly<<<gridDimGlb, blockDimGlb, 0, stream>>>(
+                    u.get(), context.plain_modulus(), context.plain_modulus_shoup(), base_rns, u.get(),
+                    poly_degree, coeff_mod_size);
+        }
+        // transform e into NTT, here coeff_mod_size corresponding to the chain index
+        nwt_2d_radix8_forward_inplace(u.get(), context.gpu_rns_tables(), coeff_mod_size, 0, stream);
+
+        // c0 = -(as + e) or c0 = -(as + te), c1 = a
+        multiply_and_add_negate_rns_poly<<<gridDimGlb, blockDimGlb, 0, stream>>>(
+                c1, new_key, u.get(), base_rns, c0, poly_degree, coeff_mod_size);
+    } else {
+        // c0 = c1 * s
+        multiply_rns_poly<<<gridDimGlb, blockDimGlb, 0, stream>>>(
+                c1, new_key, base_rns, c0, poly_degree, coeff_mod_size);
+
+        // c0 backward, here coeff_mod_size corresponding to the chain index
+        nwt_2d_radix8_backward_inplace(c0, context.gpu_rns_tables(), coeff_mod_size, 0, stream);
+
+        // c0 = -(c0 + e)
+        add_and_negate_rns_poly<<<gridDimGlb, blockDimGlb, 0, stream>>>(
+                c0, u.get(), base_rns, c0, poly_degree, coeff_mod_size);
+
+        // c1 backward
+        nwt_2d_radix8_backward_inplace(c1, context.gpu_rns_tables(), coeff_mod_size, 0, stream);
+    }
+}
+
 void PhantomSecretKey::generate_one_kswitch_key(const PhantomContext &context, uint64_t *new_key,
                                                 PhantomRelinKey &relin_keys, const cudaStream_t &stream) const {
     // Extract encryption parameters.
@@ -337,6 +402,52 @@ void PhantomSecretKey::generate_one_kswitch_key(const PhantomContext &context, u
     uint64_t gridDimGlb = poly_degree * dnum * alpha / blockDimGlb.x;
     multiply_temp_mod_and_add_rns_poly<<<gridDimGlb, blockDimGlb, 0, stream>>>(
             new_key, relin_keys.public_keys_ptr_.get(), base_rns, relin_keys.public_keys_ptr_.get(), poly_degree, dnum,
+            alpha, bigP_mod_q, bigP_mod_q_shoup);
+}
+
+void PhantomSecretKey::generate_one_kswitch_key_fused(const PhantomContext &context, uint64_t* old_key, uint64_t *new_key,
+                                                PhantomRelinKey &relin_keys, const cudaStream_t &stream) const {
+    // Extract encryption parameters.
+    auto &key_context_data = context.get_context_data(0);
+    auto &key_parms = key_context_data.parms();
+    auto &key_modulus = key_parms.coeff_modulus();
+    auto poly_degree = key_parms.poly_modulus_degree();
+    auto base_rns = context.gpu_rns_tables().modulus();
+
+    size_t size_P = key_parms.special_modulus_size();
+    size_t size_QP = key_modulus.size();
+    size_t size_Q = size_QP - size_P;
+    size_t dnum = size_Q / size_P;
+    size_t alpha = size_P;
+
+    auto bigP_mod_q = context.get_context_data(0).gpu_rns_tool().bigP_mod_q();
+    auto bigP_mod_q_shoup = context.get_context_data(0).gpu_rns_tool().bigP_mod_q_shoup();
+
+    // Every pk_ = [P_{w,q}(s^2)+(-(as+e)), a]
+
+    relin_keys.public_keys_.resize(dnum);
+    relin_keys.public_keys_ptr_ = make_cuda_auto_ptr<uint64_t *>(dnum, stream);
+
+    // First initiate the pk_ = [-(as+e), a]
+    for (size_t twr = 0; twr < dnum; twr++) {
+        PhantomPublicKey pk;
+        pk.prng_seed_a_ = make_cuda_auto_ptr<uint8_t>(phantom::util::global_variables::prng_seed_byte_count, stream);
+        random_bytes(pk.prng_seed_a_.get(), phantom::util::global_variables::prng_seed_byte_count, stream);
+        encrypt_zero_symmetric_new_key(context, new_key, pk.pk_, pk.prng_seed_a_.get(), 0, true, stream);
+        pk.gen_flag_ = true;
+        relin_keys.public_keys_[twr] = std::move(pk);
+    }
+
+    std::vector<uint64_t *> pk_ptr(dnum);
+    for (size_t twr = 0; twr < dnum; twr++)
+        pk_ptr[twr] = relin_keys.public_keys_[twr].pk_.data();
+    cudaMemcpyAsync(relin_keys.public_keys_ptr_.get(), pk_ptr.data(), sizeof(uint64_t *) * dnum, cudaMemcpyHostToDevice,
+                    stream);
+
+    // Second compute P_{w,q}(s^2)+(-(as+e))
+    uint64_t gridDimGlb = poly_degree * dnum * alpha / blockDimGlb.x;
+    multiply_temp_mod_and_add_rns_poly<<<gridDimGlb, blockDimGlb, 0, stream>>>(
+            old_key, relin_keys.public_keys_ptr_.get(), base_rns, relin_keys.public_keys_ptr_.get(), poly_degree, dnum,
             alpha, bigP_mod_q, bigP_mod_q_shoup);
 }
 
@@ -438,9 +549,11 @@ PhantomGaloisKey PhantomSecretKey::create_galois_keys(const PhantomContext &cont
     auto secret_key = secret_key_array_.get();
 
     auto relin_key_num = galois_elts.size();
+
     galois_keys.relin_keys_.resize(relin_key_num);
 
     for (size_t galois_elt_idx{0}; galois_elt_idx < relin_key_num; galois_elt_idx++) {
+
         auto galois_elt = galois_elts[galois_elt_idx];
 
         // Verify coprime conditions.
@@ -838,3 +951,78 @@ int PhantomSecretKey::invariant_noise_budget(const PhantomContext &context, cons
 
     return max(0, bit_count_diff);
 }
+
+
+PhantomGaloisKeyFused PhantomSecretKey::EvalAtIndexKeyGen(const PhantomContext& context, const std::vector<int32_t>& indexList) {
+
+    auto &context_data = context.get_context_data(context.get_first_index());
+    auto &parms = context_data.parms();
+
+    auto &key_context_data = context.get_context_data(0);
+    auto &key_parms = key_context_data.parms();
+    auto &key_modulus = key_parms.coeff_modulus();
+    auto &key_galois_tool = context.key_galois_tool_;
+    auto poly_degree = key_parms.poly_modulus_degree();
+    auto key_mod_size = key_modulus.size();
+
+    const auto &s = cudaStreamPerThread;
+
+
+    uint32_t M = 2 * poly_degree;
+
+    std::vector<uint64_t> autoIndices(indexList.size());
+    PhantomGaloisKeyFused galois_keys;
+    
+    for (size_t i = 0; i < indexList.size(); i++) {
+        autoIndices[i] = FindAutomorphismIndex2nComplex(indexList[i], M);
+    }
+
+    // Reserve keys in the map before modifying
+    for (auto indx : autoIndices) {
+        galois_keys[indx] = PhantomRelinKey(); // Creates a default object
+    }
+    
+    galois_keys[M-1] = PhantomRelinKey(); // For Conj Key
+
+
+    size_t sz = autoIndices.size();
+    auto d_vec = make_cuda_auto_ptr<uint32_t>(poly_degree, s);
+    auto rotated_secret_key = make_cuda_auto_ptr<uint64_t>(key_mod_size * poly_degree, s);
+    PhantomRelinKey relin_key;
+    uint64_t gridDimGlb = poly_degree * key_mod_size / blockDimGlb.x;
+
+    for (size_t i = 0; i < sz; ++i) {
+
+        uint64_t index;
+        if(!try_invert_uint_mod(autoIndices[i], M, index)) {
+            throw logic_error("Invalid in EvalAtIndexKeyGen");
+        }
+        
+
+        PrecomputeAutoMapKernel<<<gridDimGlb, blockDimGlb, 0, s>>>(poly_degree, index, d_vec.get());
+
+
+        key_galois_tool->apply_galois_ntt_direct(secret_key_array_.get(), key_mod_size, rotated_secret_key.get(), d_vec.get(), s);
+        
+        generate_one_kswitch_key_fused(context, secret_key_array_.get(), rotated_secret_key.get(), relin_key, s);
+        // cudaStreamSynchronize(s); 
+
+        galois_keys.setKey(autoIndices[i], std::move(relin_key));
+
+    }
+
+    //conj key
+    PrecomputeAutoMapKernel<<<gridDimGlb, blockDimGlb, 0, s>>>(poly_degree, 2*poly_degree - 1, d_vec.get());
+
+    key_galois_tool->apply_galois_ntt_direct(secret_key_array_.get(), key_mod_size, rotated_secret_key.get(), d_vec.get(), s);
+    generate_one_kswitch_key_fused(context, secret_key_array_.get(), rotated_secret_key.get(), relin_key, s);
+    // cudaStreamSynchronize(s); 
+
+    galois_keys.setKey(M - 1, std::move(relin_key));
+    
+    return galois_keys;
+}
+
+
+
+

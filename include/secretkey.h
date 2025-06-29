@@ -1,5 +1,6 @@
 #pragma once
-
+#include <iostream>
+#include <stdexcept>
 #include "context.cuh"
 
 #include "plaintext.h"
@@ -74,7 +75,7 @@ public:
         return cipher;
     }
 
-    inline PhantomCiphertext encrypt_zero_asymmetric(const PhantomContext& context)
+    inline PhantomCiphertext encrypt_zero_asymmetric(const PhantomContext& context) const
     {
         const auto& s = cudaStreamPerThread;
         PhantomCiphertext cipher;
@@ -219,12 +220,61 @@ public:
     }
 };
 
+/** PhantomGaloisKey stores Galois keys.
+ * gen_flag denotes whether the Galois key has been generated.
+ */
+class PhantomGaloisKeyFused
+{
+    friend class PhantomSecretKey;
+
+private:
+    bool gen_flag_ = false;
+    std::map<int32_t, PhantomRelinKey> key_map;
+
+    // Mutable accessor (operator[])
+    PhantomRelinKey& operator[](int32_t key) {
+        return key_map[key]; // Creates if not exists
+    }
+
+    // Setter function
+    void setKey(int32_t key, PhantomRelinKey&& relinKey) {
+        key_map[key] = std::move(relinKey);
+    }
+
+public:
+    PhantomGaloisKeyFused() = default;
+
+    PhantomGaloisKeyFused(const PhantomGaloisKeyFused&) = delete;
+
+    PhantomGaloisKeyFused& operator=(const PhantomGaloisKeyFused&) = delete;
+    
+
+    PhantomGaloisKeyFused(PhantomGaloisKeyFused&&) = default;
+
+    PhantomGaloisKeyFused& operator=(PhantomGaloisKeyFused&&) = default;
+
+    ~PhantomGaloisKeyFused() = default;
+
+
+    
+    [[nodiscard]] const PhantomRelinKey& getKey(int32_t key) const {
+        try {
+            return key_map.at(key);  // Throws std::out_of_range if key is missing
+        } catch (const std::out_of_range& e) {
+            std::cerr << "Error: Key " << key << " not found in key_map. Terminating.\n";
+            std::terminate();  // Immediately terminates the program
+        }
+    }
+    
+};
+
 /** PhantomSecretKey contains the secret key in RNS and NTT form
  * gen_flag denotes whether the secret key has been generated.
  * Always at chain index 0
  */
 class PhantomSecretKey
 {
+
 private:
     bool gen_flag_ = false;
     size_t sk_max_power_ = 0; // the max power of secret key
@@ -256,6 +306,10 @@ private:
     void encrypt_zero_symmetric(const PhantomContext& context, PhantomCiphertext& cipher, const uint8_t* prng_seed_a,
                                 size_t chain_index, bool is_ntt_form, const cudaStream_t& stream) const;
 
+    void encrypt_zero_symmetric_new_key(const PhantomContext& context, uint64_t* new_key,  PhantomCiphertext& cipher, const uint8_t* prng_seed_a,
+                                size_t chain_index, bool is_ntt_form, const cudaStream_t& stream) const;
+
+
     /** Generate one public key for this secret key
      * Return PhantomPublicKey
      * @param[in] context PhantomContext
@@ -263,6 +317,9 @@ private:
      * @throws std::invalid_argument if secret key or relinear key has not been inited
      */
     void generate_one_kswitch_key(const PhantomContext& context, uint64_t* new_key, PhantomRelinKey& relin_key,
+                                  const cudaStream_t& stream) const;
+
+    void generate_one_kswitch_key_fused(const PhantomContext& context, uint64_t* old_key, uint64_t* new_key, PhantomRelinKey& relin_key,
                                   const cudaStream_t& stream) const;
 
     void
@@ -288,6 +345,7 @@ public:
     PhantomSecretKey(const PhantomSecretKey&) = delete;
 
     PhantomSecretKey& operator=(const PhantomSecretKey&) = delete;
+    PhantomSecretKey& operator=(PhantomSecretKey&) = default;
 
     PhantomSecretKey(PhantomSecretKey&&) = default;
 
@@ -387,4 +445,15 @@ public:
 
         gen_flag_ = true;
     }
+
+    //------------------------------------------------------------------------------
+    // Direct Rotation Method for BootStrapping (CKKS)
+    //------------------------------------------------------------------------------
+
+    [[nodiscard]] PhantomGaloisKeyFused EvalRotateKeyGen(const PhantomContext &context, const std::vector<int32_t> &indexList) {
+        return EvalAtIndexKeyGen(context, indexList);
+    };
+
+    PhantomGaloisKeyFused EvalAtIndexKeyGen(const PhantomContext &context, const std::vector<int32_t> &indexList);
+
 };

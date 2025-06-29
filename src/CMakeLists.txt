@@ -15,6 +15,10 @@ add_library(Phantom SHARED
         ckks.cu
         galois.cu
         eval_key_switch.cu
+        bootstrap.cu
+        util.cu
+        convolution.cu
+	dnn.cu
 
         ntt/fntt_2d.cu
         ntt/ntt_1d.cu

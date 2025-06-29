@@ -2,15 +2,25 @@
 
 #include <iomanip>
 #include <iostream>
+#include <cmath>
 #include "phantom.h"
 #include "context.cuh"
+#include "bootstrap.cuh"
+#include <cuda_runtime.h>
+#include <random>
+#include "timer.h"
 
+#define AUX_MOD 60
 
-enum class Ops {
-    ADD,
-    SUB,
-    MUL
-};
+inline uint32_t ComputeNumLargeDigits(uint32_t numLargeDigits, uint32_t multDepth) {
+    if (numLargeDigits > 0)
+        return numLargeDigits;
+    if (multDepth > 3)  // if more than 4 towers, use 3 digits
+        return 3;
+    if (multDepth > 0)  // if 2, 3 or 4 towers, use 2 digits
+        return 2;
+    return 1;  // if 1 tower, use one digit
+}
 
 /*
 Helper function: Prints the name of the example in a fancy banner.
@@ -27,6 +37,34 @@ inline void print_example_banner(std::string title) {
                 << banner_middle << std::endl
                 << banner_top << std::endl;
     }
+}
+
+double ComputeMSE(const std::vector<double>& v1, const std::vector<double>& v2) {
+    double sum = 0.0;
+    for (size_t i = 0; i < v1.size(); ++i) {
+        double diff = v1[i] - v2[i];
+        sum += diff * diff;
+    }
+    return sum / v1.size();
+}
+
+double ComputeRMSE(const std::vector<double>& v1, const std::vector<double>& v2) {
+    return std::sqrt(ComputeMSE(v1, v2));
+}
+
+
+std::vector<double> GenerateRandomVector(size_t numSlots, double min_val = 1.0, double max_val = 5.0) {
+    std::vector<double> random_values(numSlots);
+
+    // Random number generator
+    std::random_device rd;
+    std::mt19937 gen(rd());  // Mersenne Twister engine
+    std::uniform_real_distribution<double> dis(min_val, max_val);
+
+    for (size_t i = 0; i < numSlots; ++i) {
+        random_values[i] = dis(gen);
+    }
+    return random_values;
 }
 
 /*
@@ -70,12 +108,12 @@ inline void print_parameters(const PhantomContext &context) {
     std::cout << coeff_modulus.back().bit_count();
     std::cout << ") bits" << std::endl;
 
-    // std::cout << std::endl;
-    // for (std::size_t i = 0; i < coeff_modulus_size; i++) {
-    //     std::cout << coeff_modulus[i].value() << " ,  ";
-    // }
-    // std::cout << std::endl
-    //         << std::endl;
+    std::cout << std::endl;
+    for (std::size_t i = 0; i < coeff_modulus_size; i++) {
+        std::cout << coeff_modulus[i].value() << " ,  ";
+    }
+    std::cout << std::endl
+            << std::endl;
 
     /*
     For the BFV scheme print the plain_modulus parameter.
@@ -173,93 +211,3 @@ Helper function: Print line number.
 inline void print_line(int line_number) {
     std::cout << "Line " << std::setw(3) << line_number << " --> ";
 }
-
-
-inline bool almostEqual(double a, double b, double epsilon = 1e-9) {
-    return fabs(a - b) < epsilon;
-}
-
-inline void verifyResults(std::vector<cuDoubleComplex>& result,  std::vector<cuDoubleComplex>& msg_vec, double rand_const, size_t msg_size, Ops option) {
-    
-    cuDoubleComplex expected;
-
-    for (size_t i = 0; i < msg_size; i++) {
-        if(option == Ops::MUL) {
-            expected = make_cuDoubleComplex(msg_vec[i].x * rand_const, msg_vec[i].y * rand_const);
-        }
-
-        else if(option == Ops::ADD) {
-            expected = make_cuDoubleComplex(msg_vec[i].x + rand_const, msg_vec[i].y);
-        }
-
-        else if (option == Ops::SUB) {
-            expected = make_cuDoubleComplex(msg_vec[i].x - rand_const, msg_vec[i].y);
-        }
-
-        else {
-            throwError("Invalid Option");
-        }
-
-
-        bool realPartCorrect = almostEqual(result[i].x, expected.x);
-        bool imagPartCorrect = almostEqual(result[i].y, expected.y);
-
-        if (!realPartCorrect || !imagPartCorrect) {
-            std::cout << "Mismatch found at index " << i << ":\n";
-            std::cout << "Result: " << result[i].x << " + I * " << result[i].y << std::endl;
-            std::cout << "Expected: " << expected.x << " + I * " << expected.y << std::endl;
-            throw std::logic_error("Const Calculation Error: Numerical mismatch detected");
-        }
-    }
-
-    // std::cout << "All values match within the tolerance!" << std::endl;
-}
-
-
-void example_bfv_basics();
-
-void example_bfv_batch_unbatch();
-
-void example_bfv_encrypt_decrypt();
-
-void example_bfv_encrypt_decrypt_asym();
-
-void example_bfv_add();
-
-void example_bfv_sub();
-
-void example_bfv_mul();
-
-void example_bfv_square();
-
-void example_bfv_add_plain();
-
-void example_bfv_sub_plain();
-
-void example_bfv_mul_many_plain();
-
-void example_bfv_mul_one_plain();
-
-void example_bfv_rotate_column();
-
-void example_bfv_rotate_row();
-
-void example_encoders();
-
-void examples_bgv();
-
-void examples_ckks();
-
-void example_bfv_encrypt_decrypt_hps();
-
-void example_bfv_encrypt_decrypt_hps_asym();
-
-void example_bfv_hybrid_key_switching();
-
-void example_bfv_multiply_correctness();
-
-void example_bfv_multiply_benchmark();
-
-void example_kernel_fusing();
-
-void example_aux_bootstrap();

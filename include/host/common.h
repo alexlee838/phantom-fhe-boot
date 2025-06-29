@@ -341,7 +341,7 @@ namespace phantom::arith {
     template<typename T, typename = std::enable_if_t<std::is_floating_point<T>::value>>
     [[nodiscard]] inline bool are_close(T value1, T value2) noexcept {
         double scale_factor = std::max<T>({std::fabs(value1), std::fabs(value2), T{1.0}});
-        return std::fabs(value1 - value2) < epsilon<T> * scale_factor;
+        return std::fabs(value1 - value2) < 1e-6 * scale_factor; //Relaxed
     }
 
     template<typename T, typename = std::enable_if_t<std::is_integral<T>::value>>

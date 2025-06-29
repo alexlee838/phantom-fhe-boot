@@ -2,6 +2,7 @@
 
 #include "uintmodmath.cuh"
 #include "ntt.cuh"
+#include "./host/modulus.h"
 
 __global__ void negate_rns_poly(const uint64_t* operand,
                                 const DModulus* modulus,
@@ -23,6 +24,15 @@ __global__ void add_rns_poly(const uint64_t* operand1,
                              uint64_t poly_degree,
                              uint64_t coeff_mod_size);
 
+
+__global__ void add_scalar_rns_poly(const uint64_t* operand1,
+                                    const uint64_t operand2,
+                                    const DModulus* modulus,
+                                    uint64_t* result,
+                                    uint64_t poly_degree,
+                                    uint64_t coeff_mod_size);
+
+
 __global__ void add_std_cipher(const uint64_t* cipher1,
                                const uint64_t* cipher2,
                                const DModulus* modulus,
@@ -43,6 +53,14 @@ __global__ void sub_rns_poly(const uint64_t* operand1,
                              uint64_t* result,
                              uint64_t poly_degree,
                              uint64_t coeff_mod_size);
+
+
+__global__ void sub_scalar_rns_poly(const uint64_t* operand1,
+                                    const uint64_t operand2,
+                                    const DModulus* modulus,
+                                    uint64_t* result,
+                                    uint64_t poly_degree,
+                                    uint64_t coeff_mod_size);
 
 /**  res = -(operand1 + operand2) % coeff_mod
  * @param[in] operand1 Operand1
@@ -79,6 +97,7 @@ __global__ void multiply_rns_poly(const uint64_t* operand1,
                                   uint64_t* result,
                                   uint64_t poly_degree,
                                   uint64_t coeff_mod_size);
+
 
 /**  result = (operand1 * scalar) % modulus
  * @param[in] operand1 Operand1

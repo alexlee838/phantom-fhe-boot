@@ -64,7 +64,53 @@ if (PHANTOM_ENABLE_PYTHON_BINDING)
     add_subdirectory(python)
 endif ()
 
+# BootStrap
+# [option] PHANTOM_ENABLE_BOOTSTRAP (default: ON)
+option(PHANTOM_ENABLE_BOOTSTRAP "BootStrap" ON)
+message(STATUS "Enable BootStrapping: ${PHANTOM_ENABLE_BOOTSTRAP}")
+if (PHANTOM_ENABLE_BOOTSTRAP)
+    add_subdirectory(bootstrapping)
+endif ()
+
+# Convolution
+# [option] PHANTOM_ENABLE_Convolution (default: OFF)
+option(PHANTOM_ENABLE_CONVOLUTION "Convolution" OFF)
+message(STATUS "Enable Convolution: ${PHANTOM_ENABLE_CONVOLUTION}")
+if (PHANTOM_ENABLE_CONVOLUTION)
+    add_subdirectory(convolution)
+endif ()
+
+# DNN
+# [option] PHANTOM_ENABLE_DNN (default: OFF)
+option(PHANTOM_ENABLE_DNN "DNN" OFF)
+message(STATUS "Enable DNN: ${PHANTOM_ENABLE_DNN}")
+if (PHANTOM_ENABLE_DNN)
+    add_subdirectory(DNN)
+endif ()
+
+# ResNet
+# [option] PHANTOM_ENABLE_DNN (default: OFF)
+option(PHANTOM_ENABLE_RESNET "RESNET" OFF)
+message(STATUS "Enable RESNET: ${PHANTOM_ENABLE_RESNET}")
+if (PHANTOM_ENABLE_RESNET)
+    add_subdirectory(Resnet)
+endif ()
+
 # config for installation
 install(TARGETS Phantom EXPORT PhantomConfig)
 install(EXPORT PhantomConfig NAMESPACE phantom:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/phantom)
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/phantom)
+
+# Attempt to locate and enable OpenMP
+find_package(OpenMP)
+
+if (OpenMP_CXX_FOUND)
+    message(STATUS "OpenMP found! Enabling OpenMP support.")
+else()
+    message(WARNING "OpenMP not found. Compilation will proceed without OpenMP support.")
+endif()
+
+if (OpenMP_CXX_FOUND)
+    # Assuming "Phantom" is the target name
+    target_link_libraries(Phantom PUBLIC OpenMP::OpenMP_CXX)
+endif()

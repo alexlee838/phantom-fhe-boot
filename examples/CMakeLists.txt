@@ -3,6 +3,7 @@ add_executable(example_context
         2_bgv.cu
         3_ckks.cu
         4_kernel_fusing.cu
+        5_aux_bootstrap.cu
         example.cu
 )
 target_link_libraries(example_context PRIVATE Phantom)

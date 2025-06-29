@@ -54,6 +54,24 @@ __global__ void add_rns_poly(const uint64_t *operand1,
     }
 }
 
+
+__global__ void add_scalar_rns_poly(const uint64_t *operand1,
+                                    const uint64_t operand2,
+                                    const DModulus *modulus,
+                                    uint64_t *result,
+                                    const uint64_t poly_degree,
+                                    const uint64_t coeff_mod_size) {
+    for (size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+         tid < poly_degree * coeff_mod_size;
+         tid += blockDim.x * gridDim.x) {
+        
+        size_t twr = tid / poly_degree;
+        uint64_t mod_value = modulus[twr].value();
+
+        result[tid] = add_uint64_uint64_mod(operand1[tid], operand2, mod_value);
+    }
+}
+
 __global__ void add_std_cipher(const uint64_t *cipher1,
                                const uint64_t *cipher2,
                                const DModulus *modulus,
@@ -122,6 +140,24 @@ __global__ void sub_rns_poly(const uint64_t *operand1,
     }
 }
 
+__global__ void sub_scalar_rns_poly(const uint64_t *operand1,
+                                    const uint64_t operand2,
+                                    const DModulus *modulus,
+                                    uint64_t *result,
+                                    const uint64_t poly_degree,
+                                    const uint64_t coeff_mod_size) {
+    for (size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+         tid < poly_degree * coeff_mod_size;
+         tid += blockDim.x * gridDim.x) {
+
+        size_t twr = tid / poly_degree;
+        uint64_t mod_value = modulus[twr].value();
+
+        result[tid] = sub_uint64_uint64_mod(operand1[tid], operand2, mod_value);
+    }
+}
+
+
 __global__ void add_many_rns_poly(const uint64_t *const *operands,
                                   const uint64_t add_size,
                                   const DModulus *modulus,
@@ -171,6 +207,8 @@ __global__ void multiply_rns_poly(const uint64_t *operand1,
                                                          mod.const_ratio());
     }
 }
+
+
 
 /**  res = operand1 * operand2 % coeff_mod
  * @param[in] operand Operand1

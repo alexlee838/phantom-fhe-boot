@@ -5,7 +5,8 @@
 #include "context.cuh"
 #include "polymath.cuh"
 
-class PhantomPlaintext {
+class PhantomPlaintext
+{
 
     friend class PhantomBatchEncoder;
 
@@ -14,15 +15,14 @@ class PhantomPlaintext {
     friend class PhantomSecretKey;
 
 private:
-
     std::size_t chain_index_ = 0;
     std::size_t poly_modulus_degree_ = 0;
     size_t coeff_modulus_size_ = 0;
     double scale_ = 1.0;
     phantom::util::cuda_auto_ptr<uint64_t> data_;
+    size_t noiseScaleDeg_ = 1; // the degree of the scaling factor for the encrypted message
 
 public:
-
     PhantomPlaintext() = default;
 
     PhantomPlaintext(const PhantomPlaintext &) = default;
@@ -35,38 +35,61 @@ public:
 
     ~PhantomPlaintext() = default;
 
-    void resize(const size_t coeff_modulus_size, const size_t poly_modulus_degree, const cudaStream_t &stream) {
+    void resize(const size_t coeff_modulus_size, const size_t poly_modulus_degree, const cudaStream_t &stream)
+    {
         data_ = phantom::util::make_cuda_auto_ptr<uint64_t>(coeff_modulus_size * poly_modulus_degree, stream);
 
         coeff_modulus_size_ = coeff_modulus_size;
         poly_modulus_degree_ = poly_modulus_degree;
     }
 
-    void set_chain_index(const size_t chain_index) {
+    void set_chain_index(const size_t chain_index)
+    {
         chain_index_ = chain_index;
     }
 
-    [[nodiscard]] std::size_t coeff_count() const noexcept {
+    [[nodiscard]] std::size_t coeff_count() const noexcept
+    {
         return poly_modulus_degree_ * coeff_modulus_size_;
     }
 
-    [[nodiscard]] auto &chain_index() const noexcept {
+    [[nodiscard]] auto &chain_index() const noexcept
+    {
         return chain_index_;
     }
 
-    [[nodiscard]] auto &scale() const noexcept {
+    [[nodiscard]] auto &scale() const noexcept
+    {
         return scale_;
     }
 
-    [[nodiscard]] auto data() const noexcept {
+    [[nodiscard]] auto data() const noexcept
+    {
         return data_.get();
     }
 
-    [[nodiscard]] auto &data_ptr() noexcept {
+    [[nodiscard]] auto &data_ptr() noexcept
+    {
         return data_;
     }
 
-    void save(std::ostream &stream) const {
+    [[nodiscard]] auto &GetNoiseScaleDeg() const
+    {
+        return noiseScaleDeg_;
+    }
+
+    [[nodiscard]] auto &coeff_modulus_size() const
+    {
+        return coeff_modulus_size_;
+    }
+
+    void SetNoiseScaleDeg(size_t noiseScaleDeg)
+    {
+        noiseScaleDeg_ = noiseScaleDeg;
+    }
+
+    void save(std::ostream &stream) const
+    {
         stream.write(reinterpret_cast<const char *>(&chain_index_), sizeof(chain_index_));
         stream.write(reinterpret_cast<const char *>(&poly_modulus_degree_), sizeof(poly_modulus_degree_));
         stream.write(reinterpret_cast<const char *>(&coeff_modulus_size_), sizeof(coeff_modulus_size_));
@@ -80,7 +103,8 @@ public:
         cudaFreeHost(h_data);
     }
 
-    void load(std::istream &stream) {
+    void load(std::istream &stream)
+    {
         stream.read(reinterpret_cast<char *>(&chain_index_), sizeof(chain_index_));
         stream.read(reinterpret_cast<char *>(&poly_modulus_degree_), sizeof(poly_modulus_degree_));
         stream.read(reinterpret_cast<char *>(&coeff_modulus_size_), sizeof(coeff_modulus_size_));

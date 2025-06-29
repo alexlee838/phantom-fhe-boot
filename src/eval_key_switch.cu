@@ -9,14 +9,28 @@ using namespace phantom;
 using namespace phantom::util;
 using namespace phantom::arith;
 
-namespace phantom {
+namespace phantom
+{
+#define CUDA_CHECK(call)                                          \
+    do                                                            \
+    {                                                             \
+        cudaError_t err = call;                                   \
+        if (err != cudaSuccess)                                   \
+        {                                                         \
+            fprintf(stderr, "CUDA Error at %s:%d: %s\n",          \
+                    __FILE__, __LINE__, cudaGetErrorString(err)); \
+            std::exit(EXIT_FAILURE);                              \
+        }                                                         \
+    } while (0)
 
     __global__ void key_switch_inner_prod_c2_and_evk(uint64_t *dst, const uint64_t *c2, const uint64_t *const *evks,
                                                      const DModulus *modulus, size_t n, size_t size_QP,
                                                      size_t size_QP_n,
                                                      size_t size_QlP, size_t size_QlP_n, size_t size_Q, size_t size_Ql,
-                                                     size_t beta, size_t reduction_threshold) {
-        for (size_t tid = blockIdx.x * blockDim.x + threadIdx.x; tid < size_QlP_n; tid += blockDim.x * gridDim.x) {
+                                                     size_t beta, size_t reduction_threshold)
+    {
+        for (size_t tid = blockIdx.x * blockDim.x + threadIdx.x; tid < size_QlP_n; tid += blockDim.x * gridDim.x)
+        {
             size_t nid = tid / n;
             size_t twr = (nid >= size_Ql ? size_Q + (nid - size_Ql) : nid);
             // base_rns = {q0, q1, ..., qj, p}
@@ -44,8 +58,10 @@ namespace phantom {
             // evk[0]_b
             acc1 = multiply_uint64_uint64(c2[c2_id], evks[0][evk_id + size_QP_n]);
 
-            for (uint64_t i = 1; i < beta; i++) {
-                if (i && reduction_threshold == 0) {
+            for (uint64_t i = 1; i < beta; i++)
+            {
+                if (i && reduction_threshold == 0)
+                {
                     acc0.lo = barrett_reduce_uint128_uint64(acc0, mod.value(), mod.const_ratio());
                     acc0.hi = 0;
 
@@ -71,7 +87,8 @@ namespace phantom {
     void
     key_switch_inner_prod(uint64_t *p_cx, const uint64_t *p_t_mod_up, const uint64_t *const *rlk,
                           const DRNSTool &rns_tool,
-                          const DModulus *modulus_QP, size_t reduction_threshold, const cudaStream_t &stream) {
+                          const DModulus *modulus_QP, size_t reduction_threshold, const cudaStream_t &stream)
+    {
 
         const size_t size_QP = rns_tool.size_QP();
         const size_t size_P = rns_tool.size_P();
@@ -87,13 +104,14 @@ namespace phantom {
         const size_t beta = rns_tool.v_base_part_Ql_to_compl_part_QlP_conv().size();
 
         key_switch_inner_prod_c2_and_evk<<<size_QlP_n / blockDimGlb.x, blockDimGlb, 0, stream>>>(
-                p_cx, p_t_mod_up, rlk, modulus_QP, n, size_QP, size_QP_n, size_QlP, size_QlP_n, size_Q, size_Ql, beta,
-                reduction_threshold);
+            p_cx, p_t_mod_up, rlk, modulus_QP, n, size_QP, size_QP_n, size_QlP, size_QlP_n, size_Q, size_Ql, beta,
+            reduction_threshold);
     }
 
-// cks refers to cipher to be key-switched
+    // cks refers to cipher to be key-switched
     void keyswitch_inplace(const PhantomContext &context, PhantomCiphertext &encrypted, uint64_t *c2,
-                           const PhantomRelinKey &relin_keys, bool is_relin, const cudaStream_t &stream) {
+                           const PhantomRelinKey &relin_keys, bool is_relin, const cudaStream_t &stream)
+    {
         const auto &s = stream;
 
         // Extract encryption parameters.
@@ -109,9 +127,11 @@ namespace phantom {
         // HPS and HPSOverQ does not drop modulus
         uint32_t levelsDropped;
 
-        if (scheme == scheme_type::bfv) {
+        if (scheme == scheme_type::bfv)
+        {
             levelsDropped = 0;
-            if (mul_tech == mul_tech_type::hps_overq_leveled) {
+            if (mul_tech == mul_tech_type::hps_overq_leveled)
+            {
                 size_t depth = encrypted.GetNoiseScaleDeg();
                 bool isKeySwitch = !is_relin;
                 bool is_Asymmetric = encrypted.is_asymmetric();
@@ -121,9 +141,13 @@ namespace phantom {
                 // how many levels to drop
                 levelsDropped = FindLevelsToDrop(context, levels, dcrtBits, isKeySwitch, is_Asymmetric);
             }
-        } else if (scheme == scheme_type::bgv || scheme == scheme_type::ckks) {
+        }
+        else if (scheme == scheme_type::bgv || scheme == scheme_type::ckks)
+        {
             levelsDropped = encrypted.chain_index() - 1;
-        } else {
+        }
+        else
+        {
             throw invalid_argument("unsupported scheme in keyswitch_inplace");
         }
 
@@ -139,7 +163,8 @@ namespace phantom {
         // auto size_QP_n = size_QP * n;
         auto size_QlP_n = size_QlP * n;
 
-        if (mul_tech == mul_tech_type::hps_overq_leveled && levelsDropped) {
+        if (mul_tech == mul_tech_type::hps_overq_leveled && levelsDropped)
+        {
             auto t_cks = phantom::util::make_cuda_auto_ptr<uint64_t>(size_Q * n, s);
             cudaMemcpyAsync(t_cks.get(), c2, size_Q * n * sizeof(uint64_t),
                             cudaMemcpyDeviceToDevice, s);
@@ -154,29 +179,34 @@ namespace phantom {
         // key switch
         auto cx = make_cuda_auto_ptr<uint64_t>(2 * size_QlP_n, s);
         auto reduction_threshold =
-                (1 << (bits_per_uint64 - static_cast<uint64_t>(log2(key_modulus.front().value())) - 1)) - 1;
+            (1 << (bits_per_uint64 - static_cast<uint64_t>(log2(key_modulus.front().value())) - 1)) - 1;
         key_switch_inner_prod(cx.get(), t_mod_up.get(), relin_keys.public_keys_ptr(), rns_tool, modulus_QP,
                               reduction_threshold, s);
 
         // mod down
-        for (size_t i = 0; i < 2; i++) {
+        for (size_t i = 0; i < 2; i++)
+        {
             auto cx_i = cx.get() + i * size_QlP_n;
             rns_tool.moddown_from_NTT(cx_i, cx_i, context.gpu_rns_tables(), scheme, s);
         }
 
-        for (size_t i = 0; i < 2; i++) {
+        for (size_t i = 0; i < 2; i++)
+        {
             auto cx_i = cx.get() + i * size_QlP_n;
 
-            if (mul_tech == mul_tech_type::hps_overq_leveled && levelsDropped) {
+            if (mul_tech == mul_tech_type::hps_overq_leveled && levelsDropped)
+            {
                 auto ct_i = encrypted.data() + i * size_Q * n;
                 auto t_cx = make_cuda_auto_ptr<uint64_t>(size_Q * n, s);
                 rns_tool.ExpandCRTBasis_Ql_Q(t_cx.get(), cx_i, s);
                 add_to_ct_kernel<<<(size_Q * n) / blockDimGlb.x, blockDimGlb, 0, s>>>(
-                        ct_i, t_cx.get(), rns_tool.base_Q().base(), n, size_Q);
-            } else {
+                    ct_i, t_cx.get(), rns_tool.base_Q().base(), n, size_Q);
+            }
+            else
+            {
                 auto ct_i = encrypted.data() + i * size_Ql_n;
                 add_to_ct_kernel<<<size_Ql_n / blockDimGlb.x, blockDimGlb, 0, s>>>(
-                        ct_i, cx_i, rns_tool.base_Ql().base(), n, size_Ql);
+                    ct_i, cx_i, rns_tool.base_Ql().base(), n, size_Ql);
             }
         }
     }

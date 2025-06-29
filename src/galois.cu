@@ -100,4 +100,21 @@ namespace phantom::util {
                     result, operand, table, coeff_count_, coeff_mod_size);
         }
     }
+    
+    __global__ void apply_galois_ntt_permutation_direct(uint64_t *dst, const uint64_t *src, const uint32_t *permutation_table,
+                                                 size_t poly_degree, uint64_t coeff_mod_size) {
+        for (size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+             tid < poly_degree * coeff_mod_size; tid += blockDim.x * gridDim.x) {
+            size_t twr = tid / poly_degree;
+            dst[tid] = src[permutation_table[tid % poly_degree] + twr * poly_degree];
+        }
+    }
+
+    void PhantomGaloisTool::apply_galois_ntt_direct(uint64_t *operand0,  size_t coeff_mod_size,
+                                             uint64_t *result0, uint32_t *d_vec, const cudaStream_t &stream) {
+        //RESULT AND OPERANDS SHOULD BE DIFFERENT.
+        uint64_t gridDimGlb = coeff_count_ * coeff_mod_size / blockDimGlb.x;
+      
+        apply_galois_ntt_permutation_direct<<<gridDimGlb, blockDimGlb, 0, stream>>>(result0, operand0, d_vec, coeff_count_, coeff_mod_size);
+    }
 }

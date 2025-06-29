@@ -23,6 +23,8 @@ private:
     bool is_asymmetric_ = false;
     phantom::util::cuda_auto_ptr<uint64_t> data_;
     std::vector<uint8_t> seed_; // only for symmetric encryption
+    std::vector<double> m_scalingFactorsReal;
+    std::vector<double> m_scalingFactorsRealBig;
 
 public:
 
@@ -41,7 +43,11 @@ public:
     /* Reset and malloc the ciphertext
      * @notice: when size is larger, the previous data is copied.
      */
-    void resize(const PhantomContext &context, size_t chain_index, size_t size, const cudaStream_t &stream) {
+
+    
+        
+    
+    void resize(const PhantomContext &context, size_t chain_index, size_t size, const cudaStream_t &stream, bool cpy_old_data=true) {
         auto &context_data = context.get_context_data(chain_index);
         auto &parms = context_data.parms();
         auto &coeff_modulus = parms.coeff_modulus();
@@ -56,13 +62,15 @@ public:
             return;
         }
 
-        if (new_size != old_size) {
+        if ((new_size != old_size)) {
             auto prev_data(std::move(data_));
             data_ = phantom::util::make_cuda_auto_ptr<uint64_t>(size * coeff_modulus_size * poly_modulus_degree,
                                                                 stream);
             size_t copy_size = std::min(old_size, new_size);
-            cudaMemcpyAsync(data_.get(), prev_data.get(), copy_size * sizeof(uint64_t), cudaMemcpyDeviceToDevice,
-                            stream);
+            if(cpy_old_data) {
+                cudaMemcpyAsync(data_.get(), prev_data.get(), copy_size * sizeof(uint64_t), cudaMemcpyDeviceToDevice,
+                                stream);
+            }
         }
 
         size_ = size;
@@ -71,7 +79,7 @@ public:
         coeff_modulus_size_ = coeff_modulus_size;
     }
 
-    void resize(size_t size, size_t coeff_modulus_size, size_t poly_modulus_degree, const cudaStream_t &stream) {
+    void resize(size_t size, size_t coeff_modulus_size, size_t poly_modulus_degree, const cudaStream_t &stream, bool cpy_old_data = true) {
         size_t old_size = size_ * coeff_modulus_size_ * poly_modulus_degree_;
         size_t new_size = size * coeff_modulus_size * poly_modulus_degree;
 
@@ -85,8 +93,10 @@ public:
             data_ = phantom::util::make_cuda_auto_ptr<uint64_t>(size * coeff_modulus_size * poly_modulus_degree,
                                                                 stream);
             size_t copy_size = std::min(old_size, new_size);
-            cudaMemcpyAsync(data_.get(), prev_data.get(), copy_size * sizeof(uint64_t), cudaMemcpyDeviceToDevice,
-                            stream);
+            if(cpy_old_data) {
+                cudaMemcpyAsync(data_.get(), prev_data.get(), copy_size * sizeof(uint64_t), cudaMemcpyDeviceToDevice,
+                                stream);
+            }
         }
 
         size_ = size;
@@ -169,6 +179,7 @@ public:
     [[nodiscard]] auto &seed_ptr() {
         return seed_;
     }
+
 
     void save(std::ostream &stream) const {
         stream.write(reinterpret_cast<const char *>(&chain_index_), sizeof(std::size_t));
@@ -305,4 +316,92 @@ public:
         // cleanup h_c0
         cudaFreeHost(h_c0);
     }
+
+    void PreComputeScale(const PhantomContext &context, const double& scale) {
+        
+        auto &context_data = context.get_context_data(context.get_first_index());
+        auto &parms = context_data.parms();
+        
+        std::vector<phantom::arith::Modulus> coeff_mod = parms.coeff_modulus();
+        size_t sizeQ = parms.coeff_modulus().size();
+
+        m_scalingFactorsReal.resize(sizeQ);
+
+        if ((sizeQ == 1)) {
+            // mult depth = 0 and FLEXIBLEAUTO
+            // when multiplicative depth = 0, we use the scaling mod size instead of modulus size
+            // Plaintext modulus is used in EncodingParamsImpl to store the exponent p of the scaling factor
+            m_scalingFactorsReal[0] = scale;
+        }
+
+        else {
+            m_scalingFactorsReal[0] =  static_cast<double>(coeff_mod[sizeQ - 1].value());
+
+            const double lastPresetFactor =  m_scalingFactorsReal[0];
+            // number of levels with pre-calculated factors
+            const size_t numPresetFactors = 1;
+
+            for (size_t k = numPresetFactors; k < sizeQ; k++) {
+                double prevSF           = m_scalingFactorsReal[k - 1];
+                m_scalingFactorsReal[k] = prevSF * prevSF / static_cast<double>(coeff_mod[sizeQ - k].value()); 
+                double ratio            = m_scalingFactorsReal[k] / lastPresetFactor;
+                if (ratio <= 0.5 || ratio >= 2.0) {
+                    std::cout << "k " << k << std::endl;
+                    throwError(
+                        "FLEXIBLEAUTO cannot support this number of levels in this parameter setting. Please use FIXEDMANUAL or FIXEDAUTO instead.");
+                }
+                  
+            }
+        }
+
+        m_scalingFactorsRealBig.resize(sizeQ - 1);
+
+        if (m_scalingFactorsRealBig.size() > 0) {
+            
+            m_scalingFactorsRealBig[0] = m_scalingFactorsReal[0] * m_scalingFactorsReal[0];
+
+            for (uint32_t k = 1; k < sizeQ - 1; k++) {
+                m_scalingFactorsRealBig[k] = m_scalingFactorsReal[k] * m_scalingFactorsReal[k];
+            }
+        }
+    }
+
+    std::vector<double>& getScalingFactorsReal() {
+        return m_scalingFactorsReal;
+    }
+
+    std::vector<double>& getScalingFactorsRealBig() {
+        return m_scalingFactorsRealBig;
+    }
+
+    PhantomCiphertext clone() const {
+        PhantomCiphertext copy;
+
+        // Copy all primitive data members
+        copy.chain_index_ = this->chain_index_;
+        copy.size_ = this->size_;
+        copy.poly_modulus_degree_ = this->poly_modulus_degree_;
+        copy.coeff_modulus_size_ = this->coeff_modulus_size_;
+        copy.scale_ = this->scale_;
+        copy.correction_factor_ = this->correction_factor_;
+        copy.noiseScaleDeg_ = this->noiseScaleDeg_;
+        copy.is_ntt_form_ = this->is_ntt_form_;
+        copy.is_asymmetric_ = this->is_asymmetric_;
+
+        // Copy vectors but NOT data_
+        copy.seed_ = this->seed_;
+        copy.m_scalingFactorsReal = this->m_scalingFactorsReal;
+        copy.m_scalingFactorsRealBig = this->m_scalingFactorsRealBig;
+
+        // Do NOT copy `data_`, keeping it uninitialized
+        // copy.data_ = this->data_; // Skip this line intentionally
+
+        return copy;
+    }
+
+    void share_data_with(PhantomCiphertext &other) {
+        other.data_ = this->data_;  // Make both objects share the same data pointer
+    }
+    
+
 };

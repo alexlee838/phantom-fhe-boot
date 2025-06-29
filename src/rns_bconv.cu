@@ -764,7 +764,22 @@ __global__ void add_to_ct_kernel(uint64_t *ct, const uint64_t *cx, const DModulu
     for (size_t tid = blockIdx.x * blockDim.x + threadIdx.x; tid < n * size_Ql; tid += blockDim.x * gridDim.x) {
         size_t twr = tid / n;
         DModulus mod = modulus[twr];
+        // if(tid == 0) {
+        //     printf("before\n");
+        //     printf("%llu\n",mod.value());
+        //     printf("%llu\n",cx[tid]);
+        //     printf("%llu\n",ct[tid]);
+        //     printf("%llu\n", n);
+        // }
         ct[tid] = add_uint64_uint64_mod(ct[tid], cx[tid], mod.value());
+        // printf("===== INSIDE add_to_ct_kernel TID=%llu =====\n", (unsigned long long)tid);
+
+        // if(tid == 0) {
+        //     printf("after\n");
+        //     printf("%llu\n",mod.value());
+        //     printf("%llu\n",cx[tid]);
+        //     printf("%llu\n",ct[tid]);
+        // }
     }
 }
 

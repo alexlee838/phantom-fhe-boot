@@ -8,6 +8,7 @@
 #include "host/uintcore.h"
 #include "cuda_wrapper.cuh"
 #include "ntt.cuh"
+#include "util.cuh"
 
 namespace phantom::util {
 
@@ -156,5 +157,12 @@ namespace phantom::util {
 
         void apply_galois_ntt(uint64_t *operand, size_t coeff_mod_size, size_t galois_elt_idx, uint64_t *result,
                               const cudaStream_t &stream);
+
+        void apply_galois_ntt_direct(uint64_t *operand0,  size_t coeff_mod_size,
+                                    uint64_t *result0, uint32_t *d_vec, const cudaStream_t &stream);
+
+
     };
+    __global__ void apply_galois_ntt_permutation_direct(uint64_t *dst, const uint64_t *src, const uint32_t *permutation_table,
+                                                 size_t poly_degree, uint64_t coeff_mod_size);
 }

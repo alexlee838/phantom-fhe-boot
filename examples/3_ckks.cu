@@ -9,6 +9,7 @@
 #include "example.h"
 #include "phantom.h"
 #include "util.cuh"
+// #include "bootstrap.cuh"
 
 using namespace std;
 using namespace phantom;
@@ -17,15 +18,30 @@ using namespace phantom::util;
 
 #define EPSINON 0.001
 
-inline bool operator==(const cuDoubleComplex &lhs, const cuDoubleComplex &rhs) {
+#include <cuda_runtime.h>
+
+void checkCurrentGPU()
+{
+    int device_id;
+    cudaGetDevice(&device_id); // Get the currently active GPU
+    cudaDeviceProp device_prop;
+    cudaGetDeviceProperties(&device_prop, device_id); // Get properties of the GPU
+
+    std::cout << "Current GPU: " << device_id << " - " << device_prop.name << std::endl;
+}
+
+inline bool operator==(const cuDoubleComplex &lhs, const cuDoubleComplex &rhs)
+{
     return fabs(lhs.x - rhs.x) < EPSINON;
 }
 
-inline bool compare_double(const double &lhs, const double &rhs) {
+inline bool compare_double(const double &lhs, const double &rhs)
+{
     return fabs(lhs - rhs) < EPSINON;
 }
 
-void example_ckks_enc(PhantomContext &context, const double &scale) {
+void example_ckks_enc(PhantomContext &context, const double &scale)
+{
     std::cout << "Example: CKKS Encode/Decode complex vector" << std::endl;
 
     PhantomSecretKey secret_key(context);
@@ -39,9 +55,10 @@ void example_ckks_enc(PhantomContext &context, const double &scale) {
     double rand_real;
     double rand_imag;
     // srand(time(0));
-    for (size_t i = 0; i < slot_count; i++) {
-        rand_real = (double) rand() / RAND_MAX;
-        rand_imag = (double) rand() / RAND_MAX;
+    for (size_t i = 0; i < slot_count; i++)
+    {
+        rand_real = (double)rand() / RAND_MAX;
+        rand_imag = (double)rand() / RAND_MAX;
         input[i] = make_cuDoubleComplex(rand_real, rand_imag);
     }
     cout << "Input vector: " << endl;
@@ -59,20 +76,21 @@ void example_ckks_enc(PhantomContext &context, const double &scale) {
     encoder.decode(context, x_plain, result);
     cout << "We can immediately decode this plaintext to check the correctness." << endl;
     print_vector(result, 3, 7);
-    for (size_t i = 0; i < slot_count; i++) {
+    for (size_t i = 0; i < slot_count; i++)
+    {
         correctness &= result[i] == input[i];
     }
     if (!correctness)
         throw std::logic_error("encode/decode complex vector error");
     result.clear();
 
-
     // double vector test
     std::cout << "Example: CKKS Encode/Decode double vector" << std::endl;
     vector<double> input_double(slot_count);
     // srand(time(0));
-    for (size_t i = 0; i < slot_count; i++) {
-        input_double[i] = (double) rand() / RAND_MAX;
+    for (size_t i = 0; i < slot_count; i++)
+    {
+        input_double[i] = (double)rand() / RAND_MAX;
     }
     cout << "Input vector: " << endl;
     print_vector(input_double, 3, 7);
@@ -89,7 +107,8 @@ void example_ckks_enc(PhantomContext &context, const double &scale) {
     encoder.decode(context, pt, result_double);
     cout << "We can immediately decode this plaintext to check the correctness." << endl;
     print_vector(result_double, 3, 7);
-    for (size_t i = 0; i < slot_count; i++) {
+    for (size_t i = 0; i < slot_count; i++)
+    {
         correctness &= compare_double(result_double[i], input_double[i]);
     }
     if (!correctness)
@@ -107,7 +126,8 @@ void example_ckks_enc(PhantomContext &context, const double &scale) {
     encoder.decode(context, x_symmetric_plain, result);
     // print_vector(result, 3, 7);
     correctness = true;
-    for (size_t i = 0; i < slot_count; i++) {
+    for (size_t i = 0; i < slot_count; i++)
+    {
         correctness &= result[i] == input[i];
     }
     if (!correctness)
@@ -124,14 +144,16 @@ void example_ckks_enc(PhantomContext &context, const double &scale) {
     cout << "Decode the decrypted plaintext." << endl;
     print_vector(result, 3, 7);
     correctness = true;
-    for (size_t i = 0; i < slot_count; i++) {
+    for (size_t i = 0; i < slot_count; i++)
+    {
         correctness &= result[i] == input[i];
     }
     if (!correctness)
         throw std::logic_error("Asymmetric encryption error");
 }
 
-void example_ckks_add(PhantomContext &context, const double &scale) {
+void example_ckks_add(PhantomContext &context, const double &scale)
+{
     std::cout << "Example: CKKS Add" << std::endl;
 
     // KeyGen
@@ -149,14 +171,16 @@ void example_ckks_add(PhantomContext &context, const double &scale) {
     input2.reserve(msg_size2);
     double rand_real, rand_imag;
     srand(time(0));
-    for (size_t i = 0; i < msg_size1; i++) {
-        rand_real = (double) rand() / RAND_MAX;
-        rand_imag = (double) rand() / RAND_MAX;
+    for (size_t i = 0; i < msg_size1; i++)
+    {
+        rand_real = (double)rand() / RAND_MAX;
+        rand_imag = (double)rand() / RAND_MAX;
         input1.push_back(make_cuDoubleComplex(rand_real, rand_imag));
     }
-    for (size_t i = 0; i < msg_size2; i++) {
-        rand_real = (double) rand() / RAND_MAX;
-        rand_imag = (double) rand() / RAND_MAX;
+    for (size_t i = 0; i < msg_size2; i++)
+    {
+        rand_real = (double)rand() / RAND_MAX;
+        rand_imag = (double)rand() / RAND_MAX;
         input2.push_back(make_cuDoubleComplex(rand_real, rand_imag));
     }
 
@@ -188,7 +212,8 @@ void example_ckks_add(PhantomContext &context, const double &scale) {
     cout << "Decode the decrypted plaintext." << endl;
     print_vector(result, 3, 7);
     bool correctness = true;
-    for (size_t i = 0; i < max(msg_size1, msg_size2); i++) {
+    for (size_t i = 0; i < max(msg_size1, msg_size2); i++)
+    {
         if (i >= msg_size1)
             correctness &= result[i] == input2[i];
         else if (i >= msg_size2)
@@ -210,7 +235,8 @@ void example_ckks_add(PhantomContext &context, const double &scale) {
     cout << "Decode the decrypted plaintext." << endl;
     print_vector(result, 3, 7);
     correctness = true;
-    for (size_t i = 0; i < max(msg_size1, msg_size2); i++) {
+    for (size_t i = 0; i < max(msg_size1, msg_size2); i++)
+    {
         correctness &= result[i] == input1[i];
     }
     if (!correctness)
@@ -232,7 +258,8 @@ void example_ckks_add(PhantomContext &context, const double &scale) {
     cout << "Decode the decrypted plaintext." << endl;
     print_vector(result, 3, 7);
     correctness = true;
-    for (size_t i = 0; i < max(msg_size1, msg_size2); i++) {
+    for (size_t i = 0; i < max(msg_size1, msg_size2); i++)
+    {
         if (i >= msg_size1)
             correctness &= result[i] == input2[i];
         else if (i >= msg_size2)
@@ -254,7 +281,8 @@ void example_ckks_add(PhantomContext &context, const double &scale) {
     cout << "Decode the decrypted plaintext." << endl;
     print_vector(result, 3, 7);
     correctness = true;
-    for (size_t i = 0; i < max(msg_size1, msg_size2); i++) {
+    for (size_t i = 0; i < max(msg_size1, msg_size2); i++)
+    {
         correctness &= result[i] == input2[i];
     }
     if (!correctness)
@@ -267,13 +295,15 @@ void example_ckks_add(PhantomContext &context, const double &scale) {
     uint64_t input_vector_size = 20;
     input.resize(input_vector_size);
     ciphers.reserve(input_vector_size);
-    for (size_t i = 0; i < input_vector_size; i++) {
+    for (size_t i = 0; i < input_vector_size; i++)
+    {
         size_t msg_size = slot_count;
         input[i].reserve(msg_size);
         double rand_real, rand_imag;
-        for (size_t j = 0; j < msg_size1; j++) {
-            rand_real = (double) rand() / RAND_MAX;
-            rand_imag = (double) rand() / RAND_MAX;
+        for (size_t j = 0; j < msg_size1; j++)
+        {
+            rand_real = (double)rand() / RAND_MAX;
+            rand_imag = (double)rand() / RAND_MAX;
             input[i].push_back(make_cuDoubleComplex(rand_real, rand_imag));
         }
 
@@ -320,7 +350,8 @@ void example_ckks_add(PhantomContext &context, const double &scale) {
 /** sym test ckks cipher mul a full sloted plaintext
  *  asym test ckks cipher mul only one non-zero slot
  */
-void example_ckks_mul_plain(PhantomContext &context, const double &scale) {
+void example_ckks_mul_plain(PhantomContext &context, const double &scale)
+{
     std::cout << "Example: CKKS cipher multiply plain vector" << std::endl;
 
     // KeyGen
@@ -340,18 +371,20 @@ void example_ckks_mul_plain(PhantomContext &context, const double &scale) {
     cout << "------------- Symmetric case ---------------" << endl;
 
     msg_vec.reserve(msg_size);
-    for (size_t i = 0; i < msg_size; i++) {
-        rand_real = (double) rand() / RAND_MAX;
-        rand_imag = (double) rand() / RAND_MAX;
+    for (size_t i = 0; i < msg_size; i++)
+    {
+        rand_real = (double)rand() / RAND_MAX;
+        rand_imag = (double)rand() / RAND_MAX;
         msg_vec.push_back(make_cuDoubleComplex(rand_real, rand_imag));
     }
     cout << "Message vector: " << endl;
     print_vector(msg_vec, 3, 7);
 
     const_vec.reserve(const_size);
-    for (size_t i = 0; i < const_size; i++) {
-        rand_real = (double) rand() / RAND_MAX;
-        rand_imag = (double) rand() / RAND_MAX;
+    for (size_t i = 0; i < const_size; i++)
+    {
+        rand_real = (double)rand() / RAND_MAX;
+        rand_imag = (double)rand() / RAND_MAX;
         const_vec.push_back(make_cuDoubleComplex(rand_real, rand_imag));
     }
     cout << "Constant vector: " << endl;
@@ -378,9 +411,11 @@ void example_ckks_mul_plain(PhantomContext &context, const double &scale) {
     print_vector(result, 3, 7);
 
     bool correctness = true;
-    for (size_t i = 0; i < msg_size; i++) {
+    for (size_t i = 0; i < msg_size; i++)
+    {
         correctness &= result[i] == cuCmul(msg_vec[i], const_vec[i]);
-        if (!correctness) {
+        if (!correctness)
+        {
             cout << result[i].x << " + I * " << result[i].y << endl;
             cout << cuCmul(msg_vec[i], const_vec[i]).x << " + I * " << cuCmul(msg_vec[i], const_vec[i]).y << endl;
         }
@@ -394,9 +429,10 @@ void example_ckks_mul_plain(PhantomContext &context, const double &scale) {
     cout << "------------- Asymmetric case ---------------" << endl;
     msg_size >>= 2;
     msg_vec.reserve(msg_size);
-    for (size_t i = 0; i < msg_size; i++) {
-        rand_real = (double) rand() / RAND_MAX;
-        rand_imag = (double) rand() / RAND_MAX;
+    for (size_t i = 0; i < msg_size; i++)
+    {
+        rand_real = (double)rand() / RAND_MAX;
+        rand_imag = (double)rand() / RAND_MAX;
         msg_vec.push_back(make_cuDoubleComplex(rand_real, rand_imag));
     }
     cout << "Message vector: " << endl;
@@ -406,12 +442,15 @@ void example_ckks_mul_plain(PhantomContext &context, const double &scale) {
     // This time, the length of const_vec is less than msg_vec,
     // however, CKKS encoder will automatically zero-padding const_vec
     // to the same length with msg_vec
-    for (size_t i = 0; i < 128; i++) {
-        if (i == 2) {
-            rand_real = (double) rand() / RAND_MAX;
-            rand_imag = (double) rand() / RAND_MAX;
+    for (size_t i = 0; i < 128; i++)
+    {
+        if (i == 2)
+        {
+            rand_real = (double)rand() / RAND_MAX;
+            rand_imag = (double)rand() / RAND_MAX;
             const_vec.push_back(make_cuDoubleComplex(rand_real, rand_imag));
-        } else
+        }
+        else
             const_vec.push_back(make_cuDoubleComplex(0.0, 0.0));
     }
     cout << "Constant vector: " << endl;
@@ -431,7 +470,8 @@ void example_ckks_mul_plain(PhantomContext &context, const double &scale) {
     print_vector(result, 3, 7);
 
     correctness = true;
-    for (size_t i = 0; i < msg_size; i++) {
+    for (size_t i = 0; i < msg_size; i++)
+    {
         if (i == 2)
             correctness &= result[i] == cuCmul(msg_vec[i], const_vec[i]);
         else
@@ -444,7 +484,8 @@ void example_ckks_mul_plain(PhantomContext &context, const double &scale) {
     const_vec.clear();
 }
 
-void example_ckks_mul(PhantomContext &context, const double &scale) {
+void example_ckks_mul(PhantomContext &context, const double &scale)
+{
     std::cout << "Example: CKKS HomMul test" << std::endl;
 
     // KeyGen
@@ -463,18 +504,20 @@ void example_ckks_mul(PhantomContext &context, const double &scale) {
     size_t x_size = slot_count;
     size_t y_size = slot_count;
     x_msg.reserve(x_size);
-    for (size_t i = 0; i < x_size; i++) {
-        rand_real = (double) rand() / RAND_MAX;
-        rand_imag = (double) rand() / RAND_MAX;
+    for (size_t i = 0; i < x_size; i++)
+    {
+        rand_real = (double)rand() / RAND_MAX;
+        rand_imag = (double)rand() / RAND_MAX;
         x_msg.push_back(make_cuDoubleComplex(rand_real, rand_imag));
     }
     cout << "Message vector: " << endl;
     print_vector(x_msg, 3, 7);
 
     y_msg.reserve(y_size);
-    for (size_t i = 0; i < y_size; i++) {
-        rand_real = (double) rand() / RAND_MAX;
-        rand_imag = (double) rand() / RAND_MAX;
+    for (size_t i = 0; i < y_size; i++)
+    {
+        rand_real = (double)rand() / RAND_MAX;
+        rand_imag = (double)rand() / RAND_MAX;
         y_msg.push_back(make_cuDoubleComplex(rand_real, rand_imag));
     }
     cout << "Message vector: " << endl;
@@ -509,7 +552,8 @@ void example_ckks_mul(PhantomContext &context, const double &scale) {
     print_vector(result, 3, 7);
 
     bool correctness = true;
-    for (size_t i = 0; i < x_size; i++) {
+    for (size_t i = 0; i < x_size; i++)
+    {
         correctness &= result[i] == cuCmul(x_msg[i], cuCmul(x_msg[i], y_msg[i]));
     }
     if (!correctness)
@@ -519,15 +563,21 @@ void example_ckks_mul(PhantomContext &context, const double &scale) {
     y_msg.clear();
 }
 
-void example_ckks_rotation(PhantomContext &context, const double &scale) {
+void example_ckks_rotation(PhantomContext &context, const double &scale)
+{
     std::cout << "Example: CKKS HomRot test" << std::endl;
 
     // KeyGen
     PhantomSecretKey secret_key(context);
     PhantomPublicKey public_key = secret_key.gen_publickey(context);
-    PhantomGaloisKey galois_keys = secret_key.create_galois_keys(context);
+    // PhantomGaloisKey galois_keys = secret_key.create_galois_keys(context);
+    auto &key_context_data = context.get_context_data(0);
+    auto &key_parms = key_context_data.parms();
+    auto n = key_parms.poly_modulus_degree();
 
-    int step = 3;
+    PhantomGaloisKeyFused fused_keys = secret_key.EvalRotateKeyGen(context, {1, 11, 15, 35});
+
+    int step = 35;
 
     PhantomCKKSEncoder encoder(context);
 
@@ -539,9 +589,10 @@ void example_ckks_rotation(PhantomContext &context, const double &scale) {
 
     size_t x_size = slot_count;
     x_msg.reserve(x_size);
-    for (size_t i = 0; i < x_size; i++) {
-        rand_real = (double) rand() / RAND_MAX;
-        rand_imag = (double) rand() / RAND_MAX;
+    for (size_t i = 0; i < x_size; i++)
+    {
+        rand_real = (double)rand() / RAND_MAX;
+        rand_imag = (double)rand() / RAND_MAX;
         x_msg.push_back(make_cuDoubleComplex(rand_real, rand_imag));
     }
     cout << "Message vector: " << endl;
@@ -556,17 +607,21 @@ void example_ckks_rotation(PhantomContext &context, const double &scale) {
 
     public_key.encrypt_asymmetric(context, x_plain, x_cipher);
 
-    cout << "Compute, rot vector x." << endl;
-    rotate_inplace(context, x_cipher, step, galois_keys);
+    cout << "Compute, rot vector x. (Fused Version)" << endl;
+    // rotate_inplace(context, x_cipher, step, galois_keys);
+    PhantomCiphertext x_cipher_rot;
+    EvalRotateFused(context, fused_keys, x_cipher, x_cipher_rot, step);
 
-    secret_key.decrypt(context, x_cipher, x_rot_plain);
+    // secret_key.decrypt(context, x_cipher, x_rot_plain);
+    secret_key.decrypt(context, x_cipher_rot, x_rot_plain);
 
     encoder.decode(context, x_rot_plain, result);
     cout << "Result vector: " << endl;
     print_vector(result, 3, 7);
 
     bool correctness = true;
-    for (size_t i = 0; i < x_size; i++) {
+    for (size_t i = 0; i < x_size; i++)
+    {
         correctness &= result[i] == x_msg[(i + step) % x_size];
     }
     if (!correctness)
@@ -577,9 +632,10 @@ void example_ckks_rotation(PhantomContext &context, const double &scale) {
     std::cout << "Example: CKKS HomConj test" << std::endl;
 
     x_msg.reserve(x_size);
-    for (size_t i = 0; i < x_size; i++) {
-        rand_real = (double) rand() / RAND_MAX;
-        rand_imag = (double) rand() / RAND_MAX;
+    for (size_t i = 0; i < x_size; i++)
+    {
+        rand_real = (double)rand() / RAND_MAX;
+        rand_imag = (double)rand() / RAND_MAX;
         x_msg.push_back(make_cuDoubleComplex(rand_real, rand_imag));
     }
     cout << "Message vector: " << endl;
@@ -590,17 +646,20 @@ void example_ckks_rotation(PhantomContext &context, const double &scale) {
     encoder.encode(context, x_msg, scale, x_plain);
     public_key.encrypt_asymmetric(context, x_plain, x_cipher);
 
-    cout << "Compute, conjugate vector x." << endl;
-    rotate_inplace(context, x_cipher, 0, galois_keys);
+    cout << "Compute, conjugate vector x. (Fused)" << endl;
+    // rotate_inplace(context, x_cipher, 0, galois_keys);
+    PhantomCiphertext x_cipher_conj;
+    EvalConjFused(context, fused_keys, x_cipher, x_cipher_conj);
 
-    secret_key.decrypt(context, x_cipher, x_conj_plain);
+    secret_key.decrypt(context, x_cipher_conj, x_conj_plain);
 
     encoder.decode(context, x_conj_plain, result);
     cout << "Result vector: " << endl;
     print_vector(result, 3, 7);
 
     correctness = true;
-    for (size_t i = 0; i < x_size; i++) {
+    for (size_t i = 0; i < x_size; i++)
+    {
         correctness &= result[i] == make_cuDoubleComplex(x_msg[i].x, -x_msg[i].y);
     }
     if (!correctness)
@@ -609,7 +668,8 @@ void example_ckks_rotation(PhantomContext &context, const double &scale) {
     x_msg.clear();
 }
 
-void example_ckks_small_param() {
+void example_ckks_small_param()
+{
     EncryptionParameters parms(scheme_type::ckks);
 
     size_t N = 1 << 13;
@@ -638,15 +698,18 @@ void example_ckks_small_param() {
     secret_key.decrypt(context, cipher, plain);
     encoder.decode(context, plain, output);
 
-    for (auto i = 0; i < 10; i++) {
-//        std::cout << output[i] << " ";
+    for (auto i = 0; i < 10; i++)
+    {
         if (!compare_double(input[i], output[i]))
             throw std::logic_error("error in example_ckks_small_param");
     }
     std::cout << std::endl;
 }
 
-void examples_ckks() {
+void examples_ckks()
+{
+    checkCurrentGPU();
+
     srand(time(NULL));
     /*
     We saw in `2_encoders.cpp' that multiplication in CKKS causes scales
@@ -695,50 +758,53 @@ void examples_ckks() {
     poly_modulus_degree: CoeffModulus::MaxBitCount(8192) returns 218.
     */
     std::vector v_alpha = {1, 2, 3, 4, 15};
-    for (auto alpha: v_alpha) {
+    for (auto alpha : v_alpha)
+    {
         EncryptionParameters parms(scheme_type::ckks);
 
         size_t poly_modulus_degree = 1 << 15;
         double scale = pow(2.0, 40);
-        switch (alpha) {
-            case 1:
-                parms.set_poly_modulus_degree(poly_modulus_degree);
-                parms.set_coeff_modulus(
-                        CoeffModulus::Create(poly_modulus_degree, {60, 40, 40, 40, 40, 40, 40, 40, 40, 40,
-                                                                   40, 40, 40, 40, 40, 40, 40, 40, 40, 60}));
-                break;
-            case 2:
-                parms.set_poly_modulus_degree(poly_modulus_degree);
-                parms.set_coeff_modulus(CoeffModulus::Create(
-                        poly_modulus_degree, {60, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 60, 60}));
-                parms.set_special_modulus_size(alpha);
-                break;
-            case 3:
-                parms.set_poly_modulus_degree(poly_modulus_degree);
-                parms.set_coeff_modulus(CoeffModulus::Create(
-                        poly_modulus_degree, {60, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 60, 60, 60}));
-                parms.set_special_modulus_size(alpha);
-                break;
-            case 4:
-                parms.set_poly_modulus_degree(poly_modulus_degree);
-                parms.set_coeff_modulus(CoeffModulus::Create(
-                        poly_modulus_degree, {60, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 60, 60, 60, 60}));
-                // hybrid key-switching
-                parms.set_special_modulus_size(alpha);
-                break;
-            case 15:
-                poly_modulus_degree = 1 << 16;
-                parms.set_poly_modulus_degree(poly_modulus_degree);
-                parms.set_coeff_modulus(CoeffModulus::Create(
-                        poly_modulus_degree,
-                        {60, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50,
-                         50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50,
-                         50, 50, 50, 50, 50, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60}));
-                parms.set_special_modulus_size(alpha);
-                scale = pow(2.0, 50);
-                break;
-            default:
-                throw std::invalid_argument("unsupported alpha params");
+        switch (alpha)
+        {
+        case 1:
+            parms.set_poly_modulus_degree(poly_modulus_degree);
+            parms.set_coeff_modulus(
+                CoeffModulus::Create(poly_modulus_degree, {60, 40, 40, 40, 40, 40, 40, 40, 40, 40,
+                                                           40, 40, 40, 40, 40, 40, 40, 40, 40, 60}));
+
+            break;
+        case 2:
+            parms.set_poly_modulus_degree(poly_modulus_degree);
+            parms.set_coeff_modulus(CoeffModulus::Create(
+                poly_modulus_degree, {60, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 60, 60}));
+            parms.set_special_modulus_size(alpha);
+            break;
+        case 3:
+            parms.set_poly_modulus_degree(poly_modulus_degree);
+            parms.set_coeff_modulus(CoeffModulus::Create(
+                poly_modulus_degree, {60, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 60, 60, 60}));
+            parms.set_special_modulus_size(alpha);
+            break;
+        case 4:
+            parms.set_poly_modulus_degree(poly_modulus_degree);
+            parms.set_coeff_modulus(CoeffModulus::Create(
+                poly_modulus_degree, {60, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 60, 60, 60, 60}));
+            // hybrid key-switching
+            parms.set_special_modulus_size(alpha);
+            break;
+        case 15:
+            poly_modulus_degree = 1 << 16;
+            parms.set_poly_modulus_degree(poly_modulus_degree);
+            parms.set_coeff_modulus(CoeffModulus::Create(
+                poly_modulus_degree,
+                {60, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50,
+                 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50,
+                 50, 50, 50, 50, 50, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60}));
+            parms.set_special_modulus_size(alpha);
+            scale = pow(2.0, 50);
+            break;
+        default:
+            throw std::invalid_argument("unsupported alpha params");
         }
 
         /*
@@ -750,14 +816,16 @@ void examples_ckks() {
         */
 
         PhantomContext context(parms);
+
         print_parameters(context);
         cout << endl;
 
+        // example_ckks_enc(context, scale);
+        // example_ckks_add(context, scale);
+        // example_ckks_mul_plain(context, scale);
+        // example_ckks_mul(context, scale);
+        // example_ckks_rotation(context, scale);
         example_ckks_enc(context, scale);
-        example_ckks_add(context, scale);
-        example_ckks_mul_plain(context, scale);
-        example_ckks_mul(context, scale);
-        example_ckks_rotation(context, scale);
     }
 
     example_ckks_small_param();

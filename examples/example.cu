@@ -41,6 +41,11 @@ int main(int argc, char *argv[]) {
             example_kernel_fusing();
             return 0;
         }
+
+        if (selection == 5) {
+            example_aux_bootstrap();
+            return 0;
+        }
         return 0;
     }
 
@@ -52,21 +57,23 @@ int main(int argc, char *argv[]) {
         cout << "| 2. BGV                     | 2_bgv.cu                   |" << endl;
         cout << "| 3. CKKS                    | 3_ckks.cu                  |" << endl;
         cout << "| 4. Kernel Fusing           | 4_kernel_fusing.cu         |" << endl;
+        cout << "| 5. Aux Bootstrap           | 5_aux_bootstrap.cu         |" << endl;
         cout << "+----------------------------+----------------------------+" << endl;
+
 
         int selection = 0;
         bool valid = true;
         do {
-            cout << endl << "> Run example (1 ~ 4) or exit (0): ";
+            cout << endl << "> Run example (1 ~ 5) or exit (0): ";
             if (!(cin >> selection)) {
                 valid = false;
-            } else if (selection < 0 || selection > 4) {
+            } else if (selection < 0 || selection > 5) {
                 valid = false;
             } else {
                 valid = true;
             }
             if (!valid) {
-                cout << "  [Beep~~] valid option: type 0 ~ 4" << endl;
+                cout << "  [Beep~~] valid option: type 0 ~ 5" << endl;
                 cin.clear();
                 cin.ignore(numeric_limits<streamsize>::max(), '\n');
             }
@@ -106,6 +113,10 @@ int main(int argc, char *argv[]) {
 
             case 4:
                 example_kernel_fusing();
+                break;
+            
+            case 5:
+                example_aux_bootstrap();
                 break;
 
             case 0:

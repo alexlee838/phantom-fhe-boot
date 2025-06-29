@@ -109,7 +109,7 @@ namespace phantom::arith {
      * @param[in] shift_amount the bits to be shifted.
      * @param[out] result = operand << shift_amount.
      */
-    __forceinline__ __device__ void shift_left_uint128(const uint128_t& operand,
+    __forceinline__ __host__ __device__ void shift_left_uint128(const uint128_t& operand,
                                                        const uint32_t& shift_amount,
                                                        uint128_t& result) {
         // Early return

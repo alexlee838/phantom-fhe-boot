@@ -141,7 +141,6 @@ public:
 
     phantom::mul_tech_type mul_tech_;
 
-
     DNTTTable gpu_rns_tables_;
 
     DNTTTable gpu_plain_tables_;
