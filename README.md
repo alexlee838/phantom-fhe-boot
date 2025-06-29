@@ -36,7 +36,7 @@ Refer to the [original PhantomFHE documentation](https://encryptorion-lab.gitboo
 
 ```bash
 # Clone this repository
-git clone https://github.com/alexlee838/phantom-boot.git
+git clone https://github.com/alexlee838/phantom-fhe-boot.git
 cd phantom-boot
 
 # Run individual examples (each script builds the library before execution)
